@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Face
+import androidx.compose.material.icons.rounded.ShoppingCart
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -58,6 +60,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,6 +88,7 @@ import com.bigPicture.businessreportgenerator.presentation.common.PieChart
 import com.bigPicture.businessreportgenerator.presentation.common.PieChartData
 import org.koin.androidx.compose.koinViewModel
 import java.text.NumberFormat
+import java.text.SimpleDateFormat
 import java.util.Locale
 import kotlin.random.Random
 
@@ -136,6 +140,7 @@ val InvestmentTips = listOf(
         )
     )
 )
+
 @Composable
 fun PortfolioScreen(
     modifier: Modifier = Modifier
@@ -144,6 +149,12 @@ fun PortfolioScreen(
     val portfolioState by portfolioViewModel.state.collectAsState()
     val stockViewModel: StockViewModel = koinViewModel()
     val scrollState = rememberScrollState()
+
+    // 스크롤 상태 감지
+    val listState = rememberLazyListState()
+    val hideExchangeRate by remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 100 }
+    }
 
     // 분석 화면 표시 상태 추가
     var showAnalysisScreen by remember { mutableStateOf(false) }
@@ -160,7 +171,10 @@ fun PortfolioScreen(
         Color(0xFFd299c2)  // 라벤더
     )
 
-    val exchangeRate = remember { ExchangeRate(1300.0) }
+    // 실시간 환율 사용
+    val exchangeRate = remember(portfolioState.exchangeRateInfo.usdToKrw) {
+        ExchangeRate(portfolioState.exchangeRateInfo.usdToKrw)
+    }
 
     val pieChartData = portfolioState.assets.mapIndexed { index, asset ->
         PieChartData(
@@ -197,7 +211,9 @@ fun PortfolioScreen(
                 GlassmorphismNavigationBar(
                     isRefreshing = portfolioState.isLoadingPrices,
                     onRefresh = { portfolioViewModel.refreshStockPrices() },
-                    hasStocks = portfolioState.assets.any { it.type == AssetType.STOCK }
+                    hasStocks = portfolioState.assets.any { it.type == AssetType.STOCK },
+                    exchangeRateInfo = portfolioState.exchangeRateInfo,
+                    onRefreshExchange = { portfolioViewModel.refreshExchangeRate() }
                 )
 
                 Column(
@@ -263,33 +279,106 @@ fun PortfolioScreen(
 fun GlassmorphismNavigationBar(
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
-    hasStocks: Boolean
+    hasStocks: Boolean,
+    exchangeRateInfo: ExchangeRateInfo,
+    onRefreshExchange: () -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = Color.White.copy(alpha = 0.7f),
         shadowElevation = 0.dp
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(horizontal = 24.dp, vertical = 20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 24.dp, vertical = 20.dp)
         ) {
-            Text(
-                text = "Portfolio",
-                fontSize = 32.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = Color(0xFF1A1A2E),
-                letterSpacing = (-1.2).sp
-            )
+            // 상단 헤더
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Portfolio",
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFF1A1A2E),
+                    letterSpacing = (-1.2).sp
+                )
 
-            if (hasStocks) {
+                if (hasStocks) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(
+                                        Color(0xFF667eea).copy(alpha = 0.2f),
+                                        Color(0xFF764ba2).copy(alpha = 0.2f)
+                                    )
+                                )
+                            )
+                            .clickable { if (!isRefreshing) onRefresh() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isRefreshing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = Color(0xFF667eea)
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "새로고침",
+                                tint = Color(0xFF667eea),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 환율 정보 카드
+            Spacer(modifier = Modifier.height(16.dp))
+            ExchangeRateCard(
+                exchangeRateInfo = exchangeRateInfo,
+                onRefresh = onRefreshExchange
+            )
+        }
+    }
+}
+
+@Composable
+fun ExchangeRateCard(
+    exchangeRateInfo: ExchangeRateInfo,
+    onRefresh: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFF8FAFF)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .background(
                             Brush.linearGradient(
@@ -298,29 +387,82 @@ fun GlassmorphismNavigationBar(
                                     Color(0xFF764ba2).copy(alpha = 0.2f)
                                 )
                             )
-                        )
-                        .clickable { if (!isRefreshing) onRefresh() },
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (isRefreshing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                            color = Color(0xFF667eea)
-                        )
+                    Icon(
+                        imageVector = Icons.Rounded.ShoppingCart,
+                        contentDescription = "환율",
+                        tint = Color(0xFF667eea),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column {
+                    Text(
+                        text = "USD/KRW 원달러 환율",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF8E8E93)
+                    )
+                    if (exchangeRateInfo.isLoading) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                                color = Color(0xFF667eea)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "업데이트 중...",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF667eea)
+                            )
+                        }
                     } else {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "새로고침",
-                            tint = Color(0xFF667eea),
-                            modifier = Modifier.size(20.dp)
+                        Text(
+                            text = "${String.format("%.2f", exchangeRateInfo.usdToKrw)} 원",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1A1A2E)
                         )
                     }
+                }
+            }
+
+            // 새로고침 버튼과 업데이트 시간
+            Column(
+                horizontalAlignment = Alignment.End
+            ) {
+                IconButton(
+                    onClick = onRefresh,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "환율 새로고침",
+                        tint = Color(0xFF667eea),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+
+                exchangeRateInfo.lastUpdated?.let { lastUpdated ->
+                    val formatter = SimpleDateFormat("HH:mm", Locale.getDefault())
+                    Text(
+                        text = formatter.format(lastUpdated),
+                        fontSize = 11.sp,
+                        color = Color(0xFF8E8E93),
+                        fontWeight = FontWeight.Medium
+                    )
                 }
             }
         }
     }
 }
+
 @Composable
 fun MesmerizingPortfolioContent(
     portfolioState: ModernPortfolioState,
@@ -384,7 +526,6 @@ fun MesmerizingPortfolioContent(
         )
     }
 }
-
 
 @Composable
 fun EnchantingMainAssetCard(
@@ -555,7 +696,6 @@ fun EnchantingMainAssetCard(
         }
     }
 }
-
 
 @Composable
 fun EnchantingQuickAction(
@@ -791,6 +931,7 @@ fun LuxuryAssetList(
         }
     }
 }
+
 @Composable
 fun AssetItem(
     asset: Asset,
@@ -1059,6 +1200,7 @@ fun EmptyState(
     }
 }
 
+// 기타 컴포넌트들 (CurrencyAwareAssetListItem, ModernQuickActionButton 등)도 기존과 동일하게 유지...
 
 @Composable
 fun CurrencyAwareAssetListItem(
