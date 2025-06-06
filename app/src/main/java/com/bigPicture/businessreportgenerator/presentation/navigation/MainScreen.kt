@@ -18,7 +18,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bigPicture.businessreportgenerator.presentation.features.analyst.AnalystScreen
-import com.bigPicture.businessreportgenerator.presentation.features.news.NewsScreen
 import com.bigPicture.businessreportgenerator.presentation.features.portfolio.PortfolioScreen
 import com.example.app.features.board.BoardScreen
 import org.koin.androidx.compose.koinViewModel
@@ -39,7 +38,6 @@ fun MainScreen() {
         when (selectedTab) {
             NavigationItem.Portfolio.route -> PortfolioScreen(modifier = Modifier.padding(paddingValues))
             NavigationItem.Analyst.route -> AnalystScreen(modifier = Modifier.padding(paddingValues))
-            NavigationItem.News.route -> NewsScreen(modifier = Modifier.padding(paddingValues))
             NavigationItem.Board.route -> {
                 val boardViewModel: BoardViewModel = koinViewModel()
                 val uiState by boardViewModel.uiState.collectAsState()

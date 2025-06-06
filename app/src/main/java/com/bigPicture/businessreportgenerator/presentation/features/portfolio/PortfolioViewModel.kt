@@ -13,6 +13,8 @@ import com.bigPicture.businessreportgenerator.data.domain.ExchangeRate
 import com.bigPicture.businessreportgenerator.data.domain.StockHistoryItem
 import com.bigPicture.businessreportgenerator.data.local.repository.AssetRepository
 import com.bigPicture.businessreportgenerator.data.remote.api.FinanceApiService
+import com.bigPicture.businessreportgenerator.data.remote.network.RetrofitClient
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,6 +27,12 @@ data class TickerValidationResult(
     val actualTicker: String? = null,
     val companyName: String? = null,
     val errorMessage: String? = null
+)
+
+data class ExchangeRateInfo(
+    val usdToKrw: Double = 1300.0,
+    val lastUpdated: Long? = null,
+    val isLoading: Boolean = false
 )
 
 data class ModernPortfolioState(
@@ -40,7 +48,9 @@ data class ModernPortfolioState(
     // 티커 검증 관련 상태들
     val isValidatingTicker: Boolean = false,
     val tickerValidationResult: TickerValidationResult? = null,
-    val isLoadingPrices: Boolean = false
+    val isLoadingPrices: Boolean = false,
+    // 환율 정보 추가
+    val exchangeRateInfo: ExchangeRateInfo = ExchangeRateInfo()
 )
 
 class PortfolioViewModel(
@@ -51,12 +61,83 @@ class PortfolioViewModel(
     private val _state = MutableStateFlow(ModernPortfolioState())
     val state: StateFlow<ModernPortfolioState> = _state.asStateFlow()
 
-    // 현재 환율 (실제로는 API에서 가져와야 함)
-    private val currentExchangeRate = ExchangeRate(1300.0)
+    // 현재 환율 (실시간으로 업데이트됨)
+    private var currentExchangeRate = ExchangeRate(1300.0)
 
     init {
         loadAssets()
         setRandomInvestmentTip()
+        fetchExchangeRate() // 환율 정보 가져오기
+    }
+
+    // 환율 정보 가져오기
+    fun fetchExchangeRate() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _state.update {
+                it.copy(exchangeRateInfo = it.exchangeRateInfo.copy(isLoading = true))
+            }
+
+            try {
+                val responseExchange = RetrofitClient.ExchangeService.getExchangeUs()
+                if (responseExchange.isSuccessful) {
+                    val koExData = responseExchange.body()
+                    if (koExData != null) {
+                        // 날짜가 최신인 값을 선택
+                        val latest = koExData.data.maxByOrNull { it.ExchangeDate }
+                        val newRate = latest?.ExchangeRate ?: 1300.0
+
+                        // ExchangeRate 객체와 상태 업데이트
+                        currentExchangeRate = ExchangeRate(newRate)
+
+                        _state.update {
+                            it.copy(
+                                exchangeRateInfo = ExchangeRateInfo(
+                                    usdToKrw = newRate,
+                                    lastUpdated = System.currentTimeMillis(),
+                                    isLoading = false
+                                )
+                            )
+                        }
+
+                        // 환율이 업데이트되면 자산 가치 재계산
+                        recalculatePortfolioValues()
+
+                        Log.d("PortfolioViewModel", "환율 정보 업데이트 성공: $newRate")
+                    }
+                } else {
+                    Log.e("PortfolioViewModel", "환율 정보 불러오기 실패")
+                    _state.update {
+                        it.copy(exchangeRateInfo = it.exchangeRateInfo.copy(isLoading = false))
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("PortfolioViewModel", "환율 정보 불러오기 예외: ${e.message}", e)
+                _state.update {
+                    it.copy(exchangeRateInfo = it.exchangeRateInfo.copy(isLoading = false))
+                }
+            }
+        }
+    }
+
+    // 포트폴리오 가치 재계산
+    private fun recalculatePortfolioValues() {
+        val currentAssets = _state.value.assets
+        val totalPurchaseValue = currentAssets.sumOf { it.purchasePrice }
+        val totalCurrentValue = currentAssets.sumOf {
+            it.getCurrentValueInKRW(currentExchangeRate) ?: it.purchasePrice
+        }
+        val totalReturn = totalCurrentValue - totalPurchaseValue
+        val totalReturnPercentage = if (totalPurchaseValue > 0) {
+            (totalReturn / totalPurchaseValue) * 100
+        } else 0.0
+
+        _state.update {
+            it.copy(
+                totalPortfolioValue = totalCurrentValue,
+                totalReturnValue = totalReturn,
+                totalReturnPercentage = totalReturnPercentage
+            )
+        }
     }
 
     private fun loadAssets() {
@@ -113,6 +194,16 @@ class PortfolioViewModel(
                 } else asset
             } else asset
         }
+    }
+
+    // 환율 새로고침
+    fun refreshExchangeRate() {
+        fetchExchangeRate()
+    }
+
+    // 현재 ExchangeRate 객체 반환 (다이얼로그에서 사용)
+    fun getCurrentExchangeRate(): ExchangeRate {
+        return currentExchangeRate
     }
 
     // 개선된 티커 유효성 검사

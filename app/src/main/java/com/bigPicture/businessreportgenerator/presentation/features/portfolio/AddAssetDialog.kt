@@ -30,8 +30,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.rounded.AccountBox
 import androidx.compose.material.icons.rounded.AddCircle
+import androidx.compose.material.icons.rounded.ShoppingCart
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -40,6 +42,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -72,6 +75,8 @@ import com.bigPicture.businessreportgenerator.data.domain.Currency
 import com.bigPicture.businessreportgenerator.data.domain.ExchangeRate
 import com.bigPicture.businessreportgenerator.data.domain.Market
 import org.koin.androidx.compose.koinViewModel
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 data class AssetTypeOption(
     val type: AssetType,
@@ -122,6 +127,10 @@ fun AddAssetDialog(
     var purchasePricePerShare by remember { mutableStateOf("") }
     var shares by remember { mutableStateOf("") }
     var lastValidatedTicker by remember { mutableStateOf("") }
+
+    // 실시간 환율 정보 사용
+    val realTimeExchangeRate = portfolioState.exchangeRateInfo.usdToKrw
+    val exchangeRateLastUpdated = portfolioState.exchangeRateInfo.lastUpdated
 
     // 티커 검증 로직
     LaunchedEffect(ticker) {
@@ -298,6 +307,109 @@ fun AddAssetDialog(
                                 Spacer(modifier = Modifier.height(32.dp)) // 하단 여백
 
                             } else {
+                                // 실시간 환율 정보 표시 (USD 마켓 선택시)
+                                selectedMarket?.let { market ->
+                                    if (market.currency == Currency.USD) {
+                                        Card(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(bottom = 20.dp),
+                                            shape = RoundedCornerShape(16.dp),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = Color(0xFFF0F9FF)
+                                            ),
+                                            border = BorderStroke(1.dp, Color(0xFF0EA5E9).copy(alpha = 0.3f))
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(16.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(32.dp)
+                                                            .clip(CircleShape)
+                                                            .background(Color(0xFF0EA5E9).copy(alpha = 0.2f)),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Rounded.ShoppingCart,
+                                                            contentDescription = "환율",
+                                                            tint = Color(0xFF0EA5E9),
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
+
+                                                    Spacer(modifier = Modifier.width(12.dp))
+
+                                                    Column {
+                                                        Text(
+                                                            text = "현재 환율",
+                                                            fontSize = 12.sp,
+                                                            color = Color(0xFF0369A1),
+                                                            fontWeight = FontWeight.Medium
+                                                        )
+                                                        if (portfolioState.exchangeRateInfo.isLoading) {
+                                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                                CircularProgressIndicator(
+                                                                    modifier = Modifier.size(12.dp),
+                                                                    strokeWidth = 2.dp,
+                                                                    color = Color(0xFF0EA5E9)
+                                                                )
+                                                                Spacer(modifier = Modifier.width(6.dp))
+                                                                Text(
+                                                                    text = "업데이트 중...",
+                                                                    fontSize = 14.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = Color(0xFF0EA5E9)
+                                                                )
+                                                            }
+                                                        } else {
+                                                            Text(
+                                                                text = "1 USD = ${String.format("%.2f", realTimeExchangeRate)} KRW",
+                                                                fontSize = 14.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = Color(0xFF0369A1)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
+                                                Column(
+                                                    horizontalAlignment = Alignment.End
+                                                ) {
+                                                    IconButton(
+                                                        onClick = { portfolioViewModel.refreshExchangeRate() },
+                                                        modifier = Modifier.size(28.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Refresh,
+                                                            contentDescription = "환율 새로고침",
+                                                            tint = Color(0xFF0EA5E9),
+                                                            modifier = Modifier.size(14.dp)
+                                                        )
+                                                    }
+
+                                                    exchangeRateLastUpdated?.let { lastUpdated ->
+                                                        val formatter = SimpleDateFormat("HH:mm", Locale.getDefault())
+                                                        Text(
+                                                            text = formatter.format(lastUpdated),
+                                                            fontSize = 10.sp,
+                                                            color = Color(0xFF0369A1),
+                                                            fontWeight = FontWeight.Medium
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
                                 // 매혹적인 종목 정보 입력
                                 selectedMarket?.let { market ->
                                     // 선택된 시장 표시
@@ -530,12 +642,19 @@ fun AddAssetDialog(
                                                     color = Color(0xFF34C759)
                                                 )
 
-                                                if (market.currency == Currency.USD && currentExchangeRate != null) {
-                                                    val totalInKRW = currentExchangeRate.usdToKrw(totalInMarketCurrency)
+                                                // USD인 경우 실시간 환율로 원화 환산 표시
+                                                if (market.currency == Currency.USD && !portfolioState.exchangeRateInfo.isLoading) {
+                                                    val totalInKRW = realTimeExchangeRate * totalInMarketCurrency
                                                     Text(
                                                         text = "원화 환산: ${Currency.KRW.formatAmount(totalInKRW)}",
                                                         fontSize = 14.sp,
                                                         color = Color(0xFF34C759).copy(alpha = 0.8f),
+                                                        fontWeight = FontWeight.Medium
+                                                    )
+                                                    Text(
+                                                        text = "환율: 1 USD = ${String.format("%.2f", realTimeExchangeRate)} KRW",
+                                                        fontSize = 12.sp,
+                                                        color = Color(0xFF34C759).copy(alpha = 0.7f),
                                                         fontWeight = FontWeight.Medium
                                                     )
                                                 }
@@ -555,9 +674,10 @@ fun AddAssetDialog(
                                         onClick = {
                                             val totalInMarketCurrency = pricePerShare!! * shareCount!!
 
+                                            // 실시간 환율 사용
                                             val totalInKRW = when (market.currency) {
                                                 Currency.KRW -> totalInMarketCurrency
-                                                Currency.USD -> currentExchangeRate?.usdToKrw(totalInMarketCurrency) ?: (totalInMarketCurrency * 1300.0)
+                                                Currency.USD -> realTimeExchangeRate * totalInMarketCurrency
                                             }
 
                                             val details = mutableMapOf<String, String>()

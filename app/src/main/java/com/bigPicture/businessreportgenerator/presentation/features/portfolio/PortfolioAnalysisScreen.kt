@@ -34,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,10 +73,17 @@ fun PortfolioAnalysisScreen(
     modifier: Modifier = Modifier
 ) {
     val portfolioViewModel: PortfolioViewModel = koinViewModel()
+    val portfolioState by portfolioViewModel.state.collectAsState()
+
     var analysisData by remember { mutableStateOf<List<PortfolioAnalysisData>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var totalPortfolioHistory by remember { mutableStateOf<List<Pair<String, Double>>>(emptyList()) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    // 실시간 환율 사용
+    val exchangeRate = remember(portfolioState.exchangeRateInfo.usdToKrw) {
+        ExchangeRate(portfolioState.exchangeRateInfo.usdToKrw)
+    }
 
     // 주식 타입 자산만 필터링
     val stockAssets = remember(assets) {
@@ -83,8 +91,9 @@ fun PortfolioAnalysisScreen(
     }
 
     Log.d("PortfolioAnalysis", "분석할 주식 수: ${stockAssets.size}")
+    Log.d("PortfolioAnalysis", "사용 중인 환율: ${exchangeRate.rate}")
 
-    LaunchedEffect(stockAssets) {
+    LaunchedEffect(stockAssets, exchangeRate.rate) {
         if (stockAssets.isEmpty()) {
             isLoading = false
             errorMessage = "분석할 주식이 없습니다. 주식을 추가해주세요."
@@ -97,9 +106,6 @@ fun PortfolioAnalysisScreen(
         try {
             val analysisResults = mutableListOf<PortfolioAnalysisData>()
             val portfolioValueByDate = mutableMapOf<String, Double>()
-
-            // 환율 정보 (포트폴리오 메인 화면과 동일하게)
-            val exchangeRate = ExchangeRate(1300.0)
 
             for (asset in stockAssets) {
                 try {
@@ -121,7 +127,7 @@ fun PortfolioAnalysisScreen(
                         Log.d("PortfolioAnalysis", "  - currentPrice: $currentPrice")
                         Log.d("PortfolioAnalysis", "  - market: ${asset.market}")
 
-                        // 포트폴리오 화면과 동일한 계산 방식 사용
+                        // 포트폴리오 화면과 동일한 계산 방식 사용 (실시간 환율 적용)
                         val currentValueInKRW = asset.getCurrentValueInKRW(exchangeRate) ?: asset.purchasePrice
                         val purchaseValueInKRW = asset.purchasePrice // 이미 원화로 저장됨
 
@@ -143,7 +149,7 @@ fun PortfolioAnalysisScreen(
                             )
                         )
 
-                        // 포트폴리오 전체 가치 계산 (원화로 환산)
+                        // 포트폴리오 전체 가치 계산 (실시간 환율로 원화 환산)
                         history.forEach { historyItem ->
                             val dateValueInMarketCurrency = historyItem.stockPrice * shares
                             val dateValueInKRW = when (asset.market?.currency) {
@@ -173,7 +179,8 @@ fun PortfolioAnalysisScreen(
             val totalPurchaseValue = analysisResults.sumOf { it.purchaseValue }
             val totalReturnAmount = analysisResults.sumOf { it.returnAmount }
 
-            Log.d("PortfolioAnalysis", "=== 분석 완료 (원화 기준) ===")
+            Log.d("PortfolioAnalysis", "=== 분석 완료 (실시간 환율 적용) ===")
+            Log.d("PortfolioAnalysis", "사용된 환율: ${exchangeRate.rate}")
             Log.d("PortfolioAnalysis", "총 현재 가치: $totalCurrentValue")
             Log.d("PortfolioAnalysis", "총 매입 가치: $totalPurchaseValue")
             Log.d("PortfolioAnalysis", "총 수익금: $totalReturnAmount")
@@ -208,7 +215,8 @@ fun PortfolioAnalysisScreen(
             else -> {
                 AnalysisContent(
                     analysisData = analysisData,
-                    totalPortfolioHistory = totalPortfolioHistory
+                    totalPortfolioHistory = totalPortfolioHistory,
+                    exchangeRate = exchangeRate
                 )
             }
         }
@@ -348,7 +356,8 @@ private fun EmptyDataScreen(onBackPressed: () -> Unit) {
 @Composable
 private fun AnalysisContent(
     analysisData: List<PortfolioAnalysisData>,
-    totalPortfolioHistory: List<Pair<String, Double>>
+    totalPortfolioHistory: List<Pair<String, Double>>,
+    exchangeRate: ExchangeRate
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -364,7 +373,8 @@ private fun AnalysisContent(
                     val totalPurchase = analysisData.sumOf { it.purchaseValue }
                     val totalCurrent = analysisData.sumOf { it.currentValue }
                     if (totalPurchase > 0) ((totalCurrent - totalPurchase) / totalPurchase) * 100 else 0.0
-                }
+                },
+                exchangeRate = exchangeRate
             )
         }
 
@@ -380,7 +390,8 @@ private fun AnalysisContent(
         // 개별 자산 분석
         items(analysisData) { data ->
             IndividualAssetAnalysisCard(
-                analysisData = data
+                analysisData = data,
+                exchangeRate = exchangeRate
             )
         }
     }
@@ -391,7 +402,8 @@ fun AnalysisHeaderSection(
     totalAssets: Int,
     totalValue: Double,
     totalReturn: Double,
-    totalReturnPercentage: Double
+    totalReturnPercentage: Double,
+    exchangeRate: ExchangeRate
 ) {
     val formatter = NumberFormat.getCurrencyInstance(Locale.KOREA)
     val isProfit = totalReturn >= 0
@@ -428,22 +440,48 @@ fun AnalysisHeaderSection(
                 .padding(24.dp)
         ) {
             Column {
-                Text(
-                    text = "포트폴리오 분석",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color.White,
-                    letterSpacing = (-0.6).sp
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "포트폴리오 분석",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            letterSpacing = (-0.6).sp
+                        )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                Text(
-                    text = "3개월 주가 변화 분석",
-                    fontSize = 14.sp,
-                    color = Color.White.copy(alpha = 0.9f),
-                    fontWeight = FontWeight.Medium
-                )
+                        Text(
+                            text = "3개월 주가 변화 분석",
+                            fontSize = 14.sp,
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    // 환율 정보 표시
+                    Column(
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        Text(
+                            text = "환율 적용",
+                            fontSize = 12.sp,
+                            color = Color.White.copy(alpha = 0.8f),
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = "${String.format("%.2f", exchangeRate.rate)} KRW/USD",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(24.dp))
 
@@ -606,7 +644,8 @@ fun PortfolioTotalValueChart(
 
 @Composable
 fun IndividualAssetAnalysisCard(
-    analysisData: PortfolioAnalysisData
+    analysisData: PortfolioAnalysisData,
+    exchangeRate: ExchangeRate
 ) {
     val formatter = NumberFormat.getCurrencyInstance(Locale.KOREA)
     val isProfit = analysisData.returnAmount >= 0
@@ -664,12 +703,24 @@ fun IndividualAssetAnalysisCard(
                             letterSpacing = (-0.3).sp
                         )
                         analysisData.asset.ticker?.let { ticker ->
-                            Text(
-                                text = "📊 $ticker",
-                                fontSize = 14.sp,
-                                color = Color(0xFF8E8E93),
-                                fontWeight = FontWeight.Medium
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "📊 $ticker",
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF8E8E93),
+                                    fontWeight = FontWeight.Medium
+                                )
+                                analysisData.asset.market?.let { market ->
+                                    if (market.currency == Currency.USD) {
+                                        Text(
+                                            text = " • ${String.format("%.0f", exchangeRate.rate)} KRW/USD",
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF8E8E93),
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -766,7 +817,8 @@ fun IndividualAssetAnalysisCard(
                     priceHistory = analysisData.priceHistory,
                     shares = analysisData.asset.shares ?: 1.0,
                     asset = analysisData.asset,
-                    purchaseValue = analysisData.purchaseValue.toFloat() // 매입가치 전달
+                    purchaseValue = analysisData.purchaseValue.toFloat(), // 매입가치 전달
+                    exchangeRate = exchangeRate
                 )
             }
         }
@@ -1109,10 +1161,9 @@ fun AssetPriceChart(
     priceHistory: List<StockHistoryItem>,
     shares: Double = 1.0,
     asset: Asset? = null,
-    purchaseValue: Float? = null // 매입가치 추가
+    purchaseValue: Float? = null, // 매입가치 추가
+    exchangeRate: ExchangeRate
 ) {
-    val exchangeRate = ExchangeRate(1300.0)
-
     val data = priceHistory.associate { historyItem ->
         val valueInMarketCurrency = historyItem.stockPrice * shares
         val valueInKRW = when (asset?.market?.currency) {
