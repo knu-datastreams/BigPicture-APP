@@ -3,7 +3,6 @@ package com.bigPicture.businessreportgenerator.presentation.navigation
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Face
-import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -28,12 +27,6 @@ sealed class NavigationItem(
         description = "맞춤 분석"
     )
 
-    object News : NavigationItem(
-        route = "news",
-        icon = Icons.Rounded.Notifications,
-        title = "투자 뉴스",
-        description = "시장 동향"
-    )
 
     object Board : NavigationItem(
         route = "community",
@@ -47,7 +40,6 @@ sealed class NavigationItem(
 val modernNavigationItems = listOf(
     NavigationItem.Portfolio,
     NavigationItem.Analyst,
-    NavigationItem.News,
     NavigationItem.Board
 )
 
@@ -56,6 +48,5 @@ val modernNavigationItems = listOf(
 val items = listOf(
     NavigationItem.Portfolio,
     NavigationItem.Analyst,
-    NavigationItem.News,
     NavigationItem.Board
 )
