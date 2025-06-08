@@ -87,8 +87,6 @@ fun NewsScreen(modifier: Modifier = Modifier) {
                 shape = RoundedCornerShape(0.dp)
             ) {
                 Column {
-                    // 상단 헤더 제목
-//                    AppTopBar(title = "Today's News")
                     //환율 부분
                     AnimatedVisibility(visible = !hideExchangeRate) {
                         ExchangeRateCard(

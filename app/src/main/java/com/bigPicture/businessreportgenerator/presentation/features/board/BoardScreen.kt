@@ -1,6 +1,7 @@
 package com.example.app.features.board
 
 import BoardViewModel
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -41,6 +43,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +56,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
@@ -115,19 +119,26 @@ fun BoardScreen(
     var content by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
+    val listState = rememberLazyListState()
+    val hidePageTitle by remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 100 }
+    }
+
     Scaffold(
-        topBar = {
-            PremiumTopAppBar()
-        },
         floatingActionButton = {
             PremiumFloatingActionButton(
                 onClick = { showCreateDialog = true }
             )
         },
+        topBar = {
+            AnimatedVisibility(visible = !hidePageTitle) {
+                PremiumTopAppBar()
+            }
+        },
         containerColor = PremiumColors.SystemBackground,
         modifier = modifier
     ) { padding ->
-        Box(
+        Column (
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
@@ -143,6 +154,7 @@ fun BoardScreen(
                         bottom = 100.dp
                     ),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
+                    state = listState,
                     modifier = Modifier.fillMaxSize()
                 ) {
                     // Hero section with stats
@@ -216,80 +228,84 @@ private fun PremiumTopAppBar() {
         color = PremiumColors.SecondaryBackground,
         shadowElevation = 0.dp
     ) {
-        Column {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 24.dp)
+        ) {
             // Main header content
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 24.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // App icon with gradient
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .background(
-                                brush = Brush.linearGradient(
-                                    colors = listOf(
-                                        PremiumColors.AccentBlue,
-                                        PremiumColors.AccentPurple
-                                    )
-                                ),
-                                shape = RoundedCornerShape(14.dp)
-                            )
-                            .shadow(
-                                elevation = 4.dp,
-                                shape = RoundedCornerShape(14.dp),
-                                spotColor = PremiumColors.AccentBlue.copy(alpha = 0.3f)
+                // App icon with gradient
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            brush = Brush.linearGradient(
+                                colors = listOf(
+                                    PremiumColors.AccentBlue,
+                                    PremiumColors.AccentPurple
+                                )
                             ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Person,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
+                            shape = RoundedCornerShape(14.dp)
                         )
-                    }
+                        .shadow(
+                            elevation = 4.dp,
+                            shape = RoundedCornerShape(14.dp),
+                            spotColor = PremiumColors.AccentBlue.copy(alpha = 0.3f)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Person,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
 
-                    Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(16.dp))
 
-                    Column {
-                        Text(
-                            text = "커뮤니티",
-                            style = MaterialTheme.typography.displaySmall.copy(
-                                fontSize = 32.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = PremiumColors.Primary600,
-                                letterSpacing = (-0.5).sp
-                            )
+                Column {
+                    Text(
+                        text = "커뮤니티",
+                        style = MaterialTheme.typography.displaySmall.copy(
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PremiumColors.Primary600,
+                            letterSpacing = (-0.5).sp
                         )
+                    )
 
-                        Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
 
-                        Text(
-                            text = "투자 인사이트를 공유하고 소통하세요",
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                color = PremiumColors.Secondary400,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                    Text(
+                        text = "투자 인사이트를 공유하고 소통하세요",
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            color = PremiumColors.Secondary400,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium
                         )
-                    }
+                    )
                 }
             }
-
-            // Separator
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(PremiumColors.Separator)
-            )
         }
+
+        // Separator
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(PremiumColors.Separator)
+        )
     }
+}
+
+@Preview
+@Composable
+fun PremiumTopAppBarPreview() {
+    PremiumTopAppBar()
 }
 
 @Composable

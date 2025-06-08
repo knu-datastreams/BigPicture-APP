@@ -81,6 +81,9 @@ dependencies {
     // FCM
     implementation(libs.firebase.messaging.ktx)
 
+    //Object Mapper
+    implementation ("com.fasterxml.jackson.core:jackson-databind:2.15.3")
+
     // 테스트
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

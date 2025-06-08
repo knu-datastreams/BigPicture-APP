@@ -136,6 +136,7 @@ val InvestmentTips = listOf(
         )
     )
 )
+
 @Composable
 fun PortfolioScreen(
     modifier: Modifier = Modifier

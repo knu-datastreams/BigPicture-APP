@@ -16,7 +16,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         prefs.edit { putString("fcm_token", token) }
 
         Handler(Looper.getMainLooper()).post {
-            Toast.makeText(applicationContext, "FCM 토큰이 새로 수신되었습니다. 앱을 재시작해주세요", Toast.LENGTH_SHORT).show()
+            Toast.makeText(applicationContext, "FCM 토큰이 새로 발급되었습니다.", Toast.LENGTH_SHORT).show()
         }
     }
 

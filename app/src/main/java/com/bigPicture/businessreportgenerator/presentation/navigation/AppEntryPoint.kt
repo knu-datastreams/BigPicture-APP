@@ -53,8 +53,9 @@ fun AppEntryPoint() {
     val stockViewModel: StockViewModel = koinViewModel()
     val analystViewModel: AnalystViewmodel = koinViewModel()
 
+    val prefs = context.getSharedPreferences("user_prefs", 0)
+
     LaunchedEffect(Unit) {
-        val prefs = context.getSharedPreferences("user_prefs", 0)
         onboardingCompleted = prefs.getBoolean("onboarding_completed", false)
 
         apiViewModel.updateApiMessage("서버와의 연결을 확인하는 중...")
@@ -151,14 +152,17 @@ fun AppEntryPoint() {
             if (onboardingCompleted == false) {
                 OnboardingScreen(
                     onComplete = { reportRequest ->
-                        coroutineScope.launch {
+                        coroutineScope.launch(Dispatchers.IO) {
+                            apiViewModel.sendToken(
+                                FCMToken(
+                                    uuid = prefs.getString("uuid", "-1") ?: "-1",
+                                    fcmToken = getFcmTokenSuspend(prefs)
+                                )
+                            )
                             analystViewModel.requestReport(reportRequest)
-                            context.getSharedPreferences("user_prefs", 0)
-                                .edit() {
-                                    putBoolean("onboarding_completed", true)
-                                }
-                            onboardingCompleted = true
                         }
+                        prefs.edit { putBoolean("onboarding_completed", true) }
+                        onboardingCompleted = true
                     }
                 )
             } else {
